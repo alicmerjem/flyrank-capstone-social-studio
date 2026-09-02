@@ -6,6 +6,8 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
+app.use(express.static('public'));
+
 function requireTenant(req, res, next) {
   const tenantId = req.headers['x-tenant-id'];
   if (!tenantId || typeof tenantId !== 'string' || tenantId.trim() === '') {
@@ -41,6 +43,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS schedule_slots (
     id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
     variant_id TEXT NOT NULL,
     scheduled_at TEXT NOT NULL,
     idempotency_key TEXT UNIQUE NOT NULL,
@@ -50,6 +53,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS publish_history (
     id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
     slot_id TEXT NOT NULL,
     variant_id TEXT NOT NULL,
     platform TEXT NOT NULL,
@@ -437,10 +441,13 @@ app.post('/variants/:id/schedule', (req, res) => {
   const idempotencyKey = `${id}-${scheduledAt}`;
 
   try {
-    db.prepare('INSERT INTO schedule_slots (id, variant_id, scheduled_at, idempotency_key, status) VALUES (?, ?, ?, ?, ?)')
-      .run(slotId, id, scheduledAt, idempotencyKey, 'pending');
+    db.prepare('INSERT INTO schedule_slots (id, tenant_id, variant_id, scheduled_at, idempotency_key, status) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(slotId, req.tenantId, id, scheduledAt, idempotencyKey, 'pending');
   } catch (err) {
-    return res.status(409).json({ error: 'This variant is already scheduled for this time' });
+    if (err.message.includes('UNIQUE constraint')) {
+        return res.status(409).json({ error: 'This variant is already schedules for this time' });
+    }
+    return res.status(500).json({ error: `Schedule failed: ${err.message}` });
   }
 
   res.status(201).json({ slot_id: slotId, variant_id: id, scheduled_at: scheduledAt, status: 'pending' });
@@ -450,13 +457,12 @@ const { getPublisher } = require('./publishers');
 
 app.post('/slots/:id/publish', async (req, res) => {
   const { id } = req.params;
-  const slot = db.prepare('SELECT * FROM schedule_slots WHERE id = ?').get(id);
+  const slot = db.prepare('SELECT * FROM schedule_slots WHERE id = ? AND tenant_id = ?').get(id, req.tenantId);
 
   if (!slot) {
     return res.status(404).json({ error: 'Slot not found' });
   }
 
-  // idempotency: if already published, return the original result instead of publishing again
   if (slot.status === 'published') {
     const existingHistory = db.prepare('SELECT * FROM publish_history WHERE slot_id = ? ORDER BY created_at DESC LIMIT 1').get(id);
     return res.status(200).json({ slot_id: id, status: 'already_published', history: existingHistory });
@@ -469,8 +475,8 @@ app.post('/slots/:id/publish', async (req, res) => {
   const historyId = randomUUID();
   const createdAt = new Date().toISOString();
 
-  db.prepare('INSERT INTO publish_history (id, slot_id, variant_id, platform, result, external_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(historyId, id, variant.id, variant.platform, result.success ? 'success' : 'failure', result.externalRef || result.error, createdAt);
+  db.prepare('INSERT INTO publish_history (id, tenant_id, slot_id, variant_id, platform, result, external_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(historyId, req.tenantId, id, variant.id, variant.platform, result.success ? 'success' : 'failure', result.externalRef || result.error, createdAt);
 
   if (result.success) {
     db.prepare('UPDATE schedule_slots SET status = ?, published_at = ? WHERE id = ?')
@@ -550,7 +556,7 @@ app.post('/variants/:id/pick-winner', (req, res) => {
 });
 
 app.get('/publish-history', (req, res) => {
-  const history = db.prepare('SELECT * FROM publish_history ORDER BY created_at DESC').all();
+  const history = db.prepare('SELECT * FROM publish_history WHERE tenant_id = ? ORDER BY created_at DESC').all(req.tenantId);
   res.status(200).json(history);
 });
 
@@ -565,8 +571,8 @@ async function publishSlot(slotId) {
   const historyId = randomUUID();
   const createdAt = new Date().toISOString();
 
-  db.prepare('INSERT INTO publish_history (id, slot_id, variant_id, platform, result, external_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(historyId, slotId, variant.id, variant.platform, result.success ? 'success' : 'failure', result.externalRef || result.error, createdAt);
+  db.prepare('INSERT INTO publish_history (id, tenant_id, slot_id, variant_id, platform, result, external_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(historyId, slot.tenant_id, slotId, variant.id, variant.platform, result.success ? 'success' : 'failure', result.externalRef || result.error, createdAt);
 
   if (result.success) {
     db.prepare('UPDATE schedule_slots SET status = ?, published_at = ? WHERE id = ?').run('published', createdAt, slotId);

@@ -165,6 +165,74 @@ app.get('/variants/:id', (req, res) => {
   res.status(200).json(variant);
 });
 
+app.post('/variants/:id/approve', (req, res) => {
+  const { id } = req.params;
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(id);
+
+  if (!variant) {
+    return res.status(404).json({ error: 'Variant not found' });
+  }
+
+  db.prepare('UPDATE variants SET status = ? WHERE id = ?').run('approved', id);
+  res.status(200).json({ id, status: 'approved' });
+});
+
+app.post('/variants/:id/reject', (req, res) => {
+  const { id } = req.params;
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(id);
+
+  if (!variant) {
+    return res.status(404).json({ error: 'Variant not found' });
+  }
+
+  db.prepare('UPDATE variants SET status = ? WHERE id = ?').run('rejected', id);
+  res.status(200).json({ id, status: 'rejected' });
+});
+
+app.post('/variants/:id/edit', (req, res) => {
+  const { id } = req.params;
+  const { content } = req.body;
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(id);
+
+  if (!variant) {
+    return res.status(404).json({ error: 'Variant not found' });
+  }
+
+  const validation = validateVariant(variant.platform, content);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.reason });
+  }
+
+  db.prepare('UPDATE variants SET content = ? WHERE id = ?').run(content, id);
+  res.status(200).json({ id, content, status: variant.status });
+});
+
+app.post('/variants/:id/schedule', (req, res) => {
+  const { id } = req.params;
+  const { scheduledAt } = req.body;
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(id);
+
+  if (!variant) {
+    return res.status(404).json({ error: 'Variant not found' });
+  }
+
+  if (variant.status !== 'approved') {
+    return res.status(400).json({ error: `Cannot schedule a variant with status "${variant.status}" — only approved variants can be scheduled` });
+  }
+
+  const slotId = randomUUID();
+  const idempotencyKey = `${id}-${scheduledAt}`;
+
+  try {
+    db.prepare('INSERT INTO schedule_slots (id, variant_id, scheduled_at, idempotency_key, status) VALUES (?, ?, ?, ?, ?)')
+      .run(slotId, id, scheduledAt, idempotencyKey, 'pending');
+  } catch (err) {
+    return res.status(409).json({ error: 'This variant is already scheduled for this time' });
+  }
+
+  res.status(201).json({ slot_id: slotId, variant_id: id, scheduled_at: scheduledAt, status: 'pending' });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

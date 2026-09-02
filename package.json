@@ -4,8 +4,8 @@
   "description": "Turn one blog post into a tailored campaign across multiple platforms - a short punchy version for X, a professional one for LinkedIn, a hooky caption for TikTok, and more - with human approval before anything publishes, and a scheduler that guarantess each approved post goes out exactly once, even under retries or a crash mid batch.",
   "main": "index.js",
   "scripts": {
-    "start" : "node server.js",
-    "test" : "node tests/run.js"
+    "start": "node server.js",
+    "test": "node tests/run.js"
   },
   "repository": {
     "type": "git",
@@ -22,6 +22,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "openai": "^7.9.0",
     "zod": "^4.5.4"
   }
 }

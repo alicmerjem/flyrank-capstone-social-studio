@@ -155,6 +155,15 @@ function validateVariant(platform, content, sourceContent) {
   const profile = PROFILES[platform];
   if (!profile) return { valid: false, reason: `Unknown platform: ${platform}` };
 
+//   if (content.length < 10) {
+//     return { valid: false, reason: `Content too short to be a real post (${content.length} chars) — likely a malformed or non-answer response` };
+//   }
+
+    const looksLikeLabel = /^[A-Za-z\s]{2,25}:\s*[A-Za-z]+$/.test(content.trim());
+    if (looksLikeLabel) {
+        return { valid: false, reason: `Content looks like a leaked internal label, not a real post: "${content}"` };
+    }
+
   if (content.length > profile.maxLength) {
     return { valid: false, reason: `Exceeds max length for ${platform}: ${content.length}/${profile.maxLength} chars` };
   }
@@ -236,8 +245,75 @@ function generateVariantB(platform, sourceContent) {
   return generator();
 }
 
+const OpenAI = require('openai');
+
+const llmClient = new OpenAI({
+  baseURL: process.env.LLM_BASE_URL,
+  apiKey: process.env.LLM_API_KEY,
+  timeout: 45000,
+  maxRetries: 0,
+});
+
+const PLATFORM_PROMPTS = {
+  discord: 'Write a casual, friendly Discord announcement (max 2000 characters, max 3 hashtags) based on this content.',
+  x: 'Write a short, punchy X (Twitter) post (max 280 characters, max 3 hashtags) based on this content.',
+  linkedin: 'Write a professional LinkedIn post (max 3000 characters, max 5 hashtags, no emojis) based on this content.',
+  tiktok: 'Write a hooky, attention-grabbing TikTok caption (max 150 characters, max 5 hashtags, must include at least one emoji) based on this content.',
+  instagram: 'Write a casual, aesthetic Instagram caption (max 2200 characters, max 10 hashtags, must include at least one emoji) based on this content.'
+};
+
+async function generateVariantAI(platform, sourceContent) {
+  const instruction = PLATFORM_PROMPTS[platform];
+  if (!instruction) throw new Error(`No AI prompt for platform: ${platform}`);
+
+  const systemPrompt = `You write social media posts. ${instruction} Only write the post text itself — no preamble, no explanation, no quotation marks around it. Base the post ONLY on facts present in the given content — never invent statistics, numbers, or claims not present in the source. Every hashtag MUST start with the # symbol (e.g. #ProductDevelopment, not ProductDevelopment) — never write a bare word as a hashtag.`;
+
+  async function callModel(messages) {
+    const startedAt = Date.now();
+    const completion = await llmClient.chat.completions.create({
+      model: process.env.LLM_MODEL,
+      temperature: 0.7,
+      messages
+    });
+    const usage = completion.usage || {};
+    console.log(JSON.stringify({
+      type: 'llm_call',
+      platform,
+      model: process.env.LLM_MODEL,
+      input_tokens: usage.prompt_tokens ?? null,
+      output_tokens: usage.completion_tokens ?? null,
+      duration_ms: Date.now() - startedAt
+    }));
+    return completion.choices[0].message.content.trim();
+  }
+
+  const baseMessages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: sourceContent }
+  ];
+
+  let content = await callModel(baseMessages);
+  let validation = validateVariant(platform, content, sourceContent);
+
+  if (!validation.valid) {
+    const repairMessages = [
+      ...baseMessages,
+      { role: 'assistant', content },
+      { role: 'user', content: `That was rejected for this reason: ${validation.reason}. Write a corrected version that fixes this, following the same rules.` }
+    ];
+    content = await callModel(repairMessages);
+    validation = validateVariant(platform, content, sourceContent);
+  }
+
+  if (!validation.valid) {
+    throw new Error(`AI could not produce a valid variant after repair: ${validation.reason}`);
+  }
+
+  return content;
+}
+
 // ---------- Routes ----------
-app.post('/posts/:id/generate', (req, res) => {
+app.post('/posts/:id/generate', async (req, res) => {
   const { id } = req.params;
   const post = db.prepare('SELECT * FROM posts WHERE id = ? AND tenant_id = ?').get(id, req.tenantId);
 
@@ -254,6 +330,18 @@ app.post('/posts/:id/generate', (req, res) => {
 
     if (overrides[platform] !== undefined) {
       variantContent = overrides[platform];
+    } else if (process.env.LLM_ENABLED !== 'false') {
+      try {
+        variantContent = await generateVariantAI(platform, post.content);
+      } catch (err) {
+        console.log(`AI generation failed for ${platform}, falling back to template: ${err.message}`);
+        try {
+          variantContent = generateVariant(platform, post.content);
+        } catch (err2) {
+          results.push({ platform, blocked: true, reason: err2.message });
+          continue;
+        }
+      }
     } else {
       try {
         variantContent = generateVariant(platform, post.content);

@@ -12,6 +12,8 @@ Built as a capstone project for the FlyRank AI Backend Engineering internship.
 ## Dashboard
 A full web UI at `http://localhost:3000/`. There is no need to test via terminal. Ingest a post, pick platforms, generate (with a loading indicator during AI calls), review each variant (with a badge showing whether it is AI-written, template fallback, or manually overriden), approve/edit/reject, schedule and watch publish history, all from the browser. 
 
+![dashboard](image-1.png)
+
 ## Architecture
 ```
 [blog post: URL or markdown]

@@ -35,6 +35,7 @@ db.exec(`
     platform TEXT NOT NULL,
     content TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft',
+    ab_group TEXT,
     created_at TEXT NOT NULL
   );
 
@@ -215,7 +216,23 @@ function generateVariant(platform, sourceContent) {
 
   const generator = templates[platform];
   if (!generator) throw new Error(`No template for platform: ${platform}`);
+  return generator();
+}
 
+function generateVariantB(platform, sourceContent) {
+  const profile = PROFILES[platform];
+  const truncated = sourceContent.slice(0, profile.maxLength - 40);
+
+  const templatesB = {
+    discord:   () => `Hey everyone! 📢 ${truncated}\n#news`,
+    x:         () => `Big news: ${truncated} #update`,
+    linkedin:  () => `Proud to announce: ${truncated}\n\n#innovation #team`,
+    tiktok:    () => `Wait for it... ${truncated.slice(0, 90)} 🔥 #fyp #trending`,
+    instagram: () => `${truncated} 🎉\n\n#launch #excited #new`
+  };
+
+  const generator = templatesB[platform];
+  if (!generator) throw new Error(`No B-template for platform: ${platform}`);
   return generator();
 }
 
@@ -376,6 +393,72 @@ app.post('/slots/:id/publish', async (req, res) => {
   }
 
   res.status(result.success ? 201 : 502).json({ slot_id: id, ...result });
+});
+
+app.post('/posts/:id/generate-ab', (req, res) => {
+  const { id } = req.params;
+  const post = db.prepare('SELECT * FROM posts WHERE id = ? AND tenant_id = ?').get(id, req.tenantId);
+
+  if (!post) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+
+  const platforms = req.body?.platforms || Object.keys(PROFILES);
+  const results = [];
+
+  for (const platform of platforms) {
+    let contentA, contentB;
+    try {
+      contentA = generateVariant(platform, post.content);
+      contentB = generateVariantB(platform, post.content);
+    } catch (err) {
+      results.push({ platform, blocked: true, reason: err.message });
+      continue;
+    }
+
+    const pairId = randomUUID(); // links the A/B pair together
+    const createdAt = new Date().toISOString();
+    const pair = [];
+
+    for (const [label, content] of [['A', contentA], ['B', contentB]]) {
+      const validation = validateVariant(platform, content, post.content);
+      if (!validation.valid) {
+        pair.push({ label, blocked: true, reason: validation.reason });
+        continue;
+      }
+
+      const variantId = randomUUID();
+      db.prepare('INSERT INTO variants (id, tenant_id, post_id, platform, content, status, ab_group, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(variantId, req.tenantId, id, platform, content, 'draft', pairId, createdAt);
+
+      pair.push({ id: variantId, label, content, status: 'draft' });
+    }
+
+    results.push({ platform, ab_group: pairId, variants: pair });
+  }
+
+  res.status(201).json({ post_id: id, ab_pairs: results });
+});
+
+app.post('/variants/:id/pick-winner', (req, res) => {
+  const { id } = req.params; // the winning variant's id
+  const winner = db.prepare('SELECT * FROM variants WHERE id = ? AND tenant_id = ?').get(id, req.tenantId);
+
+  if (!winner) {
+    return res.status(404).json({ error: 'Variant not found' });
+  }
+
+  if (!winner.ab_group) {
+    return res.status(400).json({ error: 'This variant is not part of an A/B pair' });
+  }
+
+  // reject the other variant(s) in the same group
+  db.prepare('UPDATE variants SET status = ? WHERE ab_group = ? AND id != ? AND tenant_id = ?')
+    .run('rejected', winner.ab_group, id, req.tenantId);
+
+  db.prepare('UPDATE variants SET status = ? WHERE id = ?').run('approved', id);
+
+  res.status(200).json({ winner_id: id, status: 'approved', message: 'Other variant(s) in this A/B group were rejected' });
 });
 
 app.get('/publish-history', (req, res) => {

@@ -42,7 +42,9 @@ Implementations: `DiscordPublisher` (real, via webhook), `MockXPublisher`, `Mock
 | Instagram (mock)    | 2200 chars           | casual/aesthetic  | 10           |
 
 ## Scheduling architecture
-Rather than adding Redis/BullMQ as an external dependency, scheduling is implemented as a DB-backed job table + polling worker: `schedule_slots` rows are the durable job store (living in SQLite, not in memory), and a worker loop polls for due, non-published slots every N seconds. Because the job's state lives in the database rather than in the worker process's memory, a worker restart mid-batch resumes correctly - it just re-queries for pending due slots and continues, using the idempotency key to guarantee any slot already marked `published` is never re-published.
+Rather than adding Redis/BullMQ as an external dependency, scheduling is implemented as a DB-backed job table + polling worker: `schedule_slots` rows are the durable job store (living in SQLite, not in memory), and a worker loop polls for due, non-published slots every N seconds. Because the job's state lives in the database rather than in the worker process's memory, a worker restart mid-batch resumes correctly - it just re-queries for pending due slots and continues, using the idempotency key to guarantee any slot already marked `published` is never re-published, both in the automatic worker path and the manual `/slots/:id/publish` endpoint.
+
+This was proven directly: a slot was scheduled, the server was killed and restarted before the scheduled time arrived, and the publish history afterward showed exactly one successful publish for that slot - no duplicate.
 
 ## Non-goal
 This capstone **does not** implement real posting to actual X, LinkedIn, TikTok, or Instagram accounts - those are mock adapters only, per the brief's explicit scope. Only Discord is a real, live publishing target. 

@@ -1,0 +1,13 @@
+run: npm start
+seed: none required — POST /posts to create a post, then /generate to create variants
+base_url: http://localhost:3000
+endpoints:
+  - POST /posts
+  - POST /posts/:id/generate
+  - GET /variants/:id
+  - POST /variants/:id/approve
+  - POST /variants/:id/reject
+  - POST /variants/:id/edit
+  - POST /variants/:id/schedule
+  - POST /slots/:id/publish
+  - GET /publish-history

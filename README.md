@@ -10,10 +10,69 @@ Built as a capstone project for the FlyRank AI Backend Engineering internship.
 4) **Schedule and publish**: an approved variant is scheduled for a time slot; a durable, crash-sage worker publishes it *exactly* once through a `SocialPublisher` adapter - a real Discord webhook, or a mock adapter (X, LinkedIn, TikTok, Instagram) that records what it would have posted. 
 
 ## Architecture
-*(diagram + full writeup added as the build progresses)*
+```
+[blog post: URL or markdown]
+        |
+        v
+   ingest + store  --->  variant generator  --->  constraint validation
+        |                                                  |
+        v                                                  v
+   review workflow: draft -> approved | rejected  (blocked variants never reach review)
+        |
+        v
+   scheduler (durable, DB-backed job store — resumes correctly after a restart)
+        |
+        v
+   SocialPublisher interface
+     +-- DiscordPublisher (real, via webhook)
+     +-- MockXPublisher / MockLinkedInPublisher / MockTikTokPublisher / MockInstagramPublisher
+        |
+        v
+   publish history: one slot = one post, always (idempotent, proven under restart)
+```
 
 ## Setup 
-*(run steps added once the system is runmable end to end)*
+```
+git clone https://github.com/YOUR_USERNAME/social-media-studio.git
+cd social-media-studio
+npm install
+```
+
+Create `.env` (see `.env.example`):
+```
+DISCORD_WEBHOOK_URL=your_discord_webhook_url
+PORT=3000
+```
+
+Then run:
+```
+npm start
+```
+
+## Usage example
+```
+# 1. Ingest a post
+curl -X POST http://localhost:3000/posts \
+  -H "Content-Type: application/json" \
+  -d '{"source":"my-blog","content":"We just shipped a new feature..."}'
+
+# 2. Generate variants for chosen platforms
+curl -X POST http://localhost:3000/posts/<post_id>/generate \
+  -H "Content-Type: application/json" \
+  -d '{"platforms":["x","linkedin","discord"]}'
+
+# 3. Approve a variant
+curl -X POST http://localhost:3000/variants/<variant_id>/approve
+
+# 4. Schedule it
+curl -X POST http://localhost:3000/variants/<variant_id>/schedule \
+  -H "Content-Type: application/json" \
+  -d '{"scheduledAt":"2026-09-05T12:00:00Z"}'
+
+# The durable worker publishes it automatically when the time arrives — 
+# no manual publish call needed. Check status:
+curl http://localhost:3000/publish-history
+```
 
 ## Constraint profiles
 See `DESIGN.md` for the full table. 
@@ -25,4 +84,7 @@ See `EVIDENCE.md` for proof of each requirement (idempotent publishing, constrai
 See `BUILDLOG.md` for an honest log where AI helped, where it was wrong and what changed. 
 
 ## Limitations
-*(filled in as the build progresses)*
+- Only Discord is a real, live publishing target - X, Instagram, LinkedIn, and TikTok are mock adapters that record what they would have posted, per the capstone's explicit scope (real posting to those platforms is out of scope).
+- Variant generation uses fixed templates rather than an LLM - the brief makrs AI generation as optional and enforcement as what is actually graded, so templates were chosen to keep the system fast, free and deterministic to test. 
+- The scheduler polls every 5 seconds rather than firing at the exact scheduled second which is acceptable for this use case (social scheduling does not need sub-second precision) but worth naming as a real trade off. 
+- No retry with backoff on a failed publish attempt (e.g. Discord webhook temporarily down) - a failed slot is marked as `failed` and would need manual retriggering rather than an automatic retry. 

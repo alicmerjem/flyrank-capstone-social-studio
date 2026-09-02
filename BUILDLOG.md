@@ -37,6 +37,25 @@ Neither of these would have been found without testing against real, unpredictab
 ## Hashtag formatting bug
 The first AI-generated LinkedIn post included hashtag-style words without the actual `# `symbol (e.g. `ProductDevelopment` instead of `#ProductDevelopment`), which passed validation since the hashtag counter only recognizes strings starting with `#`. Fixed by explicitly instructing the model in the system prompt that every hashtag must include the # symbol. Confirmed fixed on the next real generation.
 
+## Dashboard and design pass
+Added a full browser dashboard (`public/index.html`) so the system could be tested and used without the terminal - a static file served directly by Express (`express.static('public')`), with vanilla JS calling the existing API, no build step or framework added.
+
+The first version was functional but visually generic. Went through an explicit two-pass design process (plan first, then build) to land on a deliberate light-theme identity: a warm off-white/ochre palette distinct from common AI-generated-design defaults, a Zilla Slab + Space Grotesk font pairing, flat bordered buttons instead of the generic soft-shadow rounded-pill treatment, and a left-rail layout reflecting the actual 4-step pipeline (Post → Generate → Review → Schedule) rather than a generic nav.
+
+Added a loading indicator during AI generation (since calls can take up to 45s) and a "source" badge on each variant (AI-written / Template / Manual) so it's visually clear which variants actually came from the model versus the fallback path — this required a small backend change (tracking and returning a source field per variant in the /generate response) alongside the frontend work.
+
+## Bugs found while building the tenant scoped history/scheduling
+While adding `tenant_id` to `schedule_slots` and `publish_history` (closing a gap where publish history wasn't tenant-isolated), hit 3 bugs in quick succession, all found through actual testing rather than code review:
+1) A `.run()` call was missing the new `tenant_id` argument even though the SQL column list included it, caused a parameter-count mismatch.
+2) A misleading catch-all error handler reported "already scheduled" for any database error, hiding the real cause (the bug above) behind a wrong message. Fixed to only show that message for a genuine uniqueness-constraint violation, and surface the real error otherwise.
+3) A typo (`err.mesage` instead of `err.message`) in that same fixed error handler caused a new crash the first time a real error occurred — caught immediately on the next test run.
+4) A property-name mismatch (`slot.tenantId` vs. the actual `slot.tenant_id` from SQLite) in the background worker's publish path, would have caused every automatic (non-manual) publish to fail with a NOT NULL constraint violation, since undefined was being inserted as the tenant.
+
+All four were found by insisting on rerunning real end-to-end tests after each change rather than assuming the change was correct from reading it, consistent with the same discipline used throughout this build.
+
+## Decision: no hosting/deplyoment
+Considered deploying to Vercel for a live demo link, but the app's architecture (a long-running background scheduler polling every 5s, plus local SQLite disk writes) is fundamentally incompatible with Vercel's stateless serverless model. Per the capstone's own stated scope ("hosting: none required — everything runs locally"), deployment was intentionally left out rather than pursued as unnecessary scope creep, with a note in the README on which platforms would actually support this architecture if deployment is wanted later.
+
 ## What I built and checked myself
 I wrote/approved the actual constraint profile values (length limits, hashtag caps per platform), picked Discord as the real integration target, and personally ran every checkpoint test against the live system (generation, blocking, review workflow, idempotent publish, and the restart-durability test) rather than accepting any of it on Claude's word - the Discord message and the publish-history output are real, not simulated.
 

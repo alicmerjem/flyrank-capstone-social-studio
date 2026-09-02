@@ -271,6 +271,49 @@ app.post('/slots/:id/publish', async (req, res) => {
   res.status(result.success ? 201 : 502).json({ slot_id: id, ...result });
 });
 
+app.get('/publish-history', (req, res) => {
+  const history = db.prepare('SELECT * FROM publish_history ORDER BY created_at DESC').all();
+  res.status(200).json(history);
+});
+
+async function publishSlot(slotId) {
+  const slot = db.prepare('SELECT * FROM schedule_slots WHERE id = ?').get(slotId);
+  if (!slot || slot.status === 'published') return; // idempotent: skip if already done
+
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(slot.variant_id);
+  const publisher = getPublisher(variant.platform);
+
+  const result = await publisher.publish(variant.content);
+  const historyId = randomUUID();
+  const createdAt = new Date().toISOString();
+
+  db.prepare('INSERT INTO publish_history (id, slot_id, variant_id, platform, result, external_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(historyId, slotId, variant.id, variant.platform, result.success ? 'success' : 'failure', result.externalRef || result.error, createdAt);
+
+  if (result.success) {
+    db.prepare('UPDATE schedule_slots SET status = ?, published_at = ? WHERE id = ?').run('published', createdAt, slotId);
+    db.prepare('UPDATE variants SET status = ? WHERE id = ?').run('published', variant.id);
+    console.log(`Published slot ${slotId} (${variant.platform})`);
+  } else {
+    db.prepare('UPDATE schedule_slots SET status = ? WHERE id = ?').run('failed', slotId);
+    console.log(`Failed to publish slot ${slotId}: ${result.error}`);
+  }
+}
+
+async function schedulerTick() {
+  const now = new Date().toISOString();
+  const dueSlots = db.prepare(
+    "SELECT * FROM schedule_slots WHERE status = 'pending' AND scheduled_at <= ?"
+  ).all(now);
+
+  for (const slot of dueSlots) {
+    await publishSlot(slot.id);
+  }
+}
+
+setInterval(schedulerTick, 5000); // poll every 5 seconds
+console.log('Scheduler worker started — polling every 5s');
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

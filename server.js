@@ -150,7 +150,7 @@ function checkTone(platform, content) {
   return { valid: true };
 }
 
-function validateVariant(platform, content) {
+function validateVariant(platform, content, sourceContent) {
   const profile = PROFILES[platform];
   if (!profile) return { valid: false, reason: `Unknown platform: ${platform}` };
 
@@ -166,6 +166,34 @@ function validateVariant(platform, content) {
   const toneCheck = checkTone(platform, content);
   if (!toneCheck.valid) {
     return toneCheck;
+  }
+
+  if (sourceContent) {
+    const groundingCheck = checkGrounding(content, sourceContent);
+    if (!groundingCheck.valid) {
+      return groundingCheck;
+    }
+  }
+
+  return { valid: true };
+}
+
+function checkGrounding(variantContent, sourceContent) {
+  // extract numeric claims: percentages, dollar amounts, or standalone numbers 2+ digits
+  const claimRegex = /\$?\d+(?:,\d{3})*(?:\.\d+)?%?/g;
+  const claims = variantContent.match(claimRegex) || [];
+
+  const ungroundedClaims = claims.filter(claim => {
+    // normalize: strip $ and commas for comparison
+    const normalized = claim.replace(/[$,]/g, '');
+    return !sourceContent.includes(claim) && !sourceContent.includes(normalized);
+  });
+
+  if (ungroundedClaims.length > 0) {
+    return {
+      valid: false,
+      reason: `Ungrounded claim(s) not found in source post: ${ungroundedClaims.join(', ')}`
+    };
   }
 
   return { valid: true };
@@ -218,7 +246,7 @@ app.post('/posts/:id/generate', (req, res) => {
       }
     }
 
-    const validation = validateVariant(platform, variantContent);
+    const validation = validateVariant(platform, variantContent, post.content);
 
     if (!validation.valid) {
       results.push({ platform, blocked: true, reason: validation.reason });
@@ -276,7 +304,9 @@ app.post('/variants/:id/edit', (req, res) => {
     return res.status(404).json({ error: 'Variant not found' });
   }
 
-  const validation = validateVariant(variant.platform, content);
+  const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(variant.post_id);
+
+  const validation = validateVariant(variant.platform, content, post.content);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.reason });
   }

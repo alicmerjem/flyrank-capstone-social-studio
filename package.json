@@ -4,7 +4,8 @@
   "description": "Turn one blog post into a tailored campaign across multiple platforms - a short punchy version for X, a professional one for LinkedIn, a hooky caption for TikTok, and more - with human approval before anything publishes, and a scheduler that guarantess each approved post goes out exactly once, even under retries or a crash mid batch.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start" : "node server.js",
+    "test" : "node tests/run.js"
   },
   "repository": {
     "type": "git",

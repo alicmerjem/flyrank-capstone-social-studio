@@ -46,13 +46,5 @@ Rather than adding Redis/BullMQ as an external dependency, scheduling is impleme
 
 This was proven directly: a slot was scheduled, the server was killed and restarted before the scheduled time arrived, and the publish history afterward showed exactly one successful publish for that slot - no duplicate.
 
-## Stretch goals implemented (all 4 of them)
-1) **Multi-tenant isolation** - every request requires an `X-Tenant-Id` header; posts and variants are scoped per tenant at the query level, not just the UI. Proven: tenant B gets a 404 trying to access tenant A's post.
-2) **Grounding check** - variants are validated against the source post: any numeric claim (percentage, dollar amount, number) not found in the source is blocked before reaching review. Proven: a planted fake statistic (999%) gets caught and named in the rejection reason.
-3) **A/B variants with pick-the-winner** - `POST /posts/:id/generate-ab` produces two differently-phrased variants per platform; `POST /variants/:id/pick-winner` approves the chosen one and automatically rejects its pair.
-4) **Automated test suite** - npm test runs 12 tests covering every scary case from the brief: blocked variants (length/tone/grounding), refused unapproved scheduling, duplicate-publish prevention, adapter swap across two mock platforms, and tenant isolation. All 12 pass.
-
-Cost tracking is not implemented (yet, I might) since no AI is used anywhere in this build (variant generation is template based, as the brief allows), there is no LLM cost to track. 
-
 ## Non-goal
 This capstone **does not** implement real posting to actual X, LinkedIn, TikTok, or Instagram accounts - those are mock adapters only, per the brief's explicit scope. Only Discord is a real, live publishing target. 

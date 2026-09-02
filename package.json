@@ -1,0 +1,25 @@
+{
+  "name": "social-studio",
+  "version": "1.0.0",
+  "description": "Turn one blog post into a tailored campaign across multiple platforms - a short punchy version for X, a professional one for LinkedIn, a hooky caption for TikTok, and more - with human approval before anything publishes, and a scheduler that guarantess each approved post goes out exactly once, even under retries or a crash mid batch.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alicmerjem/social-studio.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/alicmerjem/social-studio/issues"
+  },
+  "homepage": "https://github.com/alicmerjem/social-studio#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "zod": "^4.5.4"
+  }
+}

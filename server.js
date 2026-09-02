@@ -121,6 +121,22 @@ function countHashtags(text) {
   return matches ? matches.length : 0;
 }
 
+function checkTone(platform, content) {
+  const profile = PROFILES[platform];
+  const emojiRegex = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+  const hasEmoji = emojiRegex.test(content);
+
+  if (profile.tone === 'professional' && hasEmoji) {
+    return { valid: false, reason: `Tone violation for ${platform}: professional tone should not include emojis` };
+  }
+
+  if ((profile.tone === 'hooky' || profile.tone === 'casual/aesthetic') && !hasEmoji) {
+    return { valid: false, reason: `Tone violation for ${platform}: ${profile.tone} tone expects at least one emoji` };
+  }
+
+  return { valid: true };
+}
+
 function validateVariant(platform, content) {
   const profile = PROFILES[platform];
   if (!profile) return { valid: false, reason: `Unknown platform: ${platform}` };
@@ -132,6 +148,11 @@ function validateVariant(platform, content) {
   const hashtagCount = countHashtags(content);
   if (hashtagCount > profile.maxHashtags) {
     return { valid: false, reason: `Too many hashtags for ${platform}: ${hashtagCount}/${profile.maxHashtags}` };
+  }
+
+  const toneCheck = checkTone(platform, content);
+  if (!toneCheck.valid) {
+    return toneCheck;
   }
 
   return { valid: true };
@@ -158,23 +179,6 @@ function generateVariant(platform, sourceContent) {
 }
 
 // ---------- Routes ----------
-
-app.post('/posts', (req, res) => {
-  const { source, content } = req.body;
-
-  if (!content || typeof content !== 'string' || content.trim() === '') {
-    return res.status(400).json({ error: 'content is required' });
-  }
-
-  const id = randomUUID();
-  const createdAt = new Date().toISOString();
-
-  db.prepare('INSERT INTO posts (id, source, content, created_at) VALUES (?, ?, ?, ?)')
-    .run(id, source || null, content, createdAt);
-
-  res.status(201).json({ id, source, content, created_at: createdAt });
-});
-
 app.post('/posts/:id/generate', (req, res) => {
   const { id } = req.params;
   const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);

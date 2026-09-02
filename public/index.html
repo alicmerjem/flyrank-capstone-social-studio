@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Studio — Social Media Campaign Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #FAF9F6;
+    --panel: #F1EFE9;
+    --ink: #14161F;
+    --ink-soft: #4A4A45;
+    --accent: #D97B0C;
+    --accent-dark: #B8650A;
+    --line: #D8D4C8;
+    --live: #2E7D5B;
+    --live-dark: #1F5A40;
+    --danger: #B4432E;
+    --danger-dark: #8F3524;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    margin: 0;
+    display: flex;
+    min-height: 100vh;
+  }
+  h1, h2, .wordmark { font-family: 'Zilla Slab', serif; }
+
+  /* ---- Left rail: the signal chain ---- */
+  #rail {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    padding: 24px 20px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  .wordmark { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+  .tagline { font-size: 12px; color: var(--ink-soft); margin: 0 0 28px; }
+  .step {
+    display: flex;
+    gap: 10px;
+    padding: 10px 0;
+    font-size: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .step-num {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid var(--ink);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+    flex-shrink: 0;
+  }
+  .tenant-field { margin-top: 28px; }
+  .tenant-field label { font-size: 11px; color: var(--ink-soft); display: block; margin-bottom: 4px; }
+
+  /* ---- Main content ---- */
+  #main { flex: 1; padding: 30px 40px; max-width: 900px; }
+  .panel {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 18px 20px;
+    margin-bottom: 22px;
+  }
+  .panel h2 { font-size: 17px; margin: 0 0 12px; }
+
+  input, textarea {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    padding: 9px 10px;
+    border: 1.5px solid var(--line);
+    border-radius: 3px;
+    background: white;
+    color: var(--ink);
+    width: 100%;
+  }
+  textarea { resize: vertical; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+
+  /* ---- Buttons: flat fill, sharp radius, solid border instead of shadow ---- */
+  button {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 9px 16px;
+    border-radius: 3px;
+    cursor: pointer;
+    border: 2px solid var(--accent-dark);
+    background: var(--accent);
+    color: white;
+    margin: 3px 4px 3px 0;
+  }
+  button:hover { background: var(--accent-dark); }
+  button.secondary { background: var(--panel); color: var(--ink); border-color: var(--line); }
+  button.secondary:hover { background: var(--line); }
+  button.danger { background: var(--danger); border-color: var(--danger-dark); }
+  button.danger:hover { background: var(--danger-dark); }
+
+  .platform-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .platform-row label { font-size: 13px; display: flex; align-items: center; gap: 5px; }
+
+  /* ---- Platform accent dots — each platform visually distinct ---- */
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot.discord { background: #5865F2; }
+  .dot.x { background: #14161F; }
+  .dot.linkedin { background: #0A66C2; }
+  .dot.tiktok { background: #E1306C; }
+  .dot.instagram { background: #C13584; }
+
+  .variant-card {
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--ink);
+    border-radius: 2px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: white;
+  }
+  .variant-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+  .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+  .badge.draft { background: #E3E1D8; color: var(--ink-soft); }
+  .badge.approved { background: #D9F0E4; color: var(--live-dark); }
+  .badge.rejected { background: #F5DDD6; color: var(--danger-dark); }
+  .badge.published { background: #DCEAFA; color: #1B4D8C; }
+  .badge.src-ai { background: #FBE7CF; color: var(--accent-dark); }
+  .badge.src-template { background: #EDEBE4; color: var(--ink-soft); }
+  .badge.src-manual { background: #E3E1D8; color: var(--ink-soft); }
+  .blocked-msg { color: var(--danger-dark); font-size: 13px; }
+
+  .variant-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .variant-msg { font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+
+  .history-row { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .history-row:last-child { border-bottom: none; }
+
+  /* ---- Loading indicator ---- */
+  #loadingBar {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--accent-dark);
+    margin: 8px 0;
+  }
+  #loadingBar.active { display: flex; }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--panel);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="rail">
+  <div class="wordmark">Studio</div>
+  <div class="tagline">One post. Every channel.</div>
+
+  <div class="step"><div class="step-num">1</div><div>Post</div></div>
+  <div class="step"><div class="step-num">2</div><div>Generate</div></div>
+  <div class="step"><div class="step-num">3</div><div>Review</div></div>
+  <div class="step"><div class="step-num">4</div><div>Schedule</div></div>
+
+  <div class="tenant-field">
+    <label>Tenant ID</label>
+    <input id="tenantId" value="tenant-a" />
+  </div>
+</div>
+
+<div id="main">
+  <div class="panel">
+    <h2>Master post</h2>
+    <textarea id="postSource" rows="3" placeholder="Paste a URL or write the source content here..."></textarea>
+    <div style="margin-top:10px;">
+      <button onclick="createPost()">Ingest post</button>
+      <button class="secondary" onclick="newPost()">New post</button>
+      <span id="postStatus" class="variant-msg"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Channels</h2>
+    <div class="platform-row" id="platformChecks">
+      <label><input type="checkbox" value="discord" checked><span class="dot discord"></span> Discord</label>
+      <label><input type="checkbox" value="x" checked><span class="dot x"></span> X</label>
+      <label><input type="checkbox" value="linkedin" checked><span class="dot linkedin"></span> LinkedIn</label>
+      <label><input type="checkbox" value="tiktok" checked><span class="dot tiktok"></span> TikTok</label>
+      <label><input type="checkbox" value="instagram" checked><span class="dot instagram"></span> Instagram</label>
+    </div>
+    <button onclick="generateVariants(false)">Generate</button>
+    <button class="secondary" onclick="generateVariants(true)">Generate A/B pair</button>
+    <div id="loadingBar"><div class="spinner"></div> Writing variants — this can take up to 45s per platform on the free tier...</div>
+  </div>
+
+  <div class="panel">
+    <h2>Review &amp; schedule</h2>
+    <div id="variantsList"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Publish history</h2>
+    <button class="secondary" onclick="loadHistory()">Refresh</button>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<script>
+let currentPostId = null;
+
+function tenantHeaders() {
+  return { 'Content-Type': 'application/json', 'X-Tenant-Id': document.getElementById('tenantId').value };
+}
+
+async function createPost() {
+  const source = document.getElementById('postSource').value;
+  const res = await fetch('/posts', { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ source }) });
+  const data = await res.json();
+  if (!res.ok) { document.getElementById('postStatus').textContent = 'Error: ' + data.error; return; }
+  currentPostId = data.id;
+  document.getElementById('postStatus').textContent = `Post ingested — ${data.id}`;
+}
+
+function newPost() {
+    currentPostId = null;
+    document.getElementById('postSource').value = '';
+    document.getElementById('postStatus').textContent = '';
+    document.getElementById('variantsList').innerHTML = '';
+}
+
+function selectedPlatforms() {
+  return Array.from(document.querySelectorAll('#platformChecks input:checked')).map(cb => cb.value);
+}
+
+function sourceBadge(source) {
+  if (source === 'ai') return '<span class="badge src-ai">AI-written</span>';
+  if (source === 'manual') return '<span class="badge src-manual">Manual</span>';
+  return '<span class="badge src-template">Template</span>';
+}
+
+async function generateVariants(ab) {
+  if (!currentPostId) { alert('Ingest a post first'); return; }
+  const platforms = selectedPlatforms();
+  const path = ab ? `/posts/${currentPostId}/generate-ab` : `/posts/${currentPostId}/generate`;
+
+  document.getElementById('loadingBar').classList.add('active');
+
+  const res = await fetch(path, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ platforms }) });
+  const data = await res.json();
+
+  document.getElementById('loadingBar').classList.remove('active');
+
+  const list = document.getElementById('variantsList');
+  list.innerHTML = '';
+
+  const items = ab
+    ? data.ab_pairs.flatMap(p => p.variants.map(v => ({...v, platform: p.platform, ab_group: p.ab_group})))
+    : data.variants;
+
+  items.forEach(v => {
+    const div = document.createElement('div');
+    div.className = 'variant-card';
+    if (v.blocked) {
+      div.innerHTML = `
+        <div class="variant-head"><span class="dot ${v.platform}"></span> ${v.platform}${v.label ? ' ('+v.label+')' : ''}</div>
+        <div class="blocked-msg">Blocked — ${v.reason}</div>`;
+    } else {
+      div.innerHTML = `
+        <div class="variant-head">
+          <span class="dot ${v.platform}"></span> ${v.platform}${v.label ? ' ('+v.label+')' : ''}
+          <span class="badge ${v.status}">${v.status}</span>
+          ${v.source ? sourceBadge(v.source) : ''}
+        </div>
+        <textarea id="content-${v.id}" rows="3">${v.content}</textarea>
+        <div class="variant-actions">
+          <button onclick="approve('${v.id}')">Approve</button>
+          <button class="danger" onclick="reject('${v.id}')">Reject</button>
+          <button class="secondary" onclick="edit('${v.id}')">Save edit</button>
+          <input type="datetime-local" id="sched-${v.id}" style="width:auto;" />
+          <button onclick="schedule('${v.id}')">Schedule</button>
+          ${v.ab_group ? `<button class="secondary" onclick="pickWinner('${v.id}')">Pick as winner</button>` : ''}
+        </div>
+        <div id="msg-${v.id}" class="variant-msg"></div>
+      `;
+    }
+    list.appendChild(div);
+  });
+}
+
+async function approve(id) {
+  const res = await fetch(`/variants/${id}/approve`, { method: 'POST', headers: tenantHeaders() });
+  const data = await res.json();
+  document.getElementById(`msg-${id}`).textContent = JSON.stringify(data);
+}
+async function reject(id) {
+  const res = await fetch(`/variants/${id}/reject`, { method: 'POST', headers: tenantHeaders() });
+  const data = await res.json();
+  document.getElementById(`msg-${id}`).textContent = JSON.stringify(data);
+}
+async function edit(id) {
+  const content = document.getElementById(`content-${id}`).value;
+  const res = await fetch(`/variants/${id}/edit`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ content }) });
+  const data = await res.json();
+  document.getElementById(`msg-${id}`).textContent = JSON.stringify(data);
+}
+async function schedule(id) {
+  const val = document.getElementById(`sched-${id}`).value;
+  if (!val) { alert('Pick a date/time first'); return; }
+  const scheduledAt = new Date(val).toISOString();
+  const res = await fetch(`/variants/${id}/schedule`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ scheduledAt }) });
+  const data = await res.json();
+  document.getElementById(`msg-${id}`).textContent = JSON.stringify(data);
+}
+async function pickWinner(id) {
+  const res = await fetch(`/variants/${id}/pick-winner`, { method: 'POST', headers: tenantHeaders() });
+  const data = await res.json();
+  document.getElementById(`msg-${id}`).textContent = JSON.stringify(data);
+}
+async function loadHistory() {
+  const res = await fetch('/publish-history', { headers: tenantHeaders() });
+  const data = await res.json();
+  const list = document.getElementById('historyList');
+  list.innerHTML = data.slice(0, 20).map(h =>
+    `<div class="history-row"><span class="dot ${h.platform}"></span> <strong>${h.platform}</strong> ${h.result} — ${h.created_at}</div>`
+  ).join('');
+}
+
+loadHistory();
+</script>
+</body>
+</html>

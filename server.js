@@ -331,16 +331,20 @@ app.post('/posts/:id/generate', async (req, res) => {
 
   for (const platform of platforms) {
     let variantContent;
+    let source = 'template';
 
     if (overrides[platform] !== undefined) {
       variantContent = overrides[platform];
+      source = 'manual';
     } else if (process.env.LLM_ENABLED !== 'false') {
       try {
         variantContent = await generateVariantAI(platform, post.content);
+        source = 'ai';
       } catch (err) {
         console.log(`AI generation failed for ${platform}, falling back to template: ${err.message}`);
         try {
           variantContent = generateVariant(platform, post.content);
+          source = 'template';
         } catch (err2) {
           results.push({ platform, blocked: true, reason: err2.message });
           continue;
@@ -368,7 +372,7 @@ app.post('/posts/:id/generate', async (req, res) => {
     db.prepare('INSERT INTO variants (id, tenant_id, post_id, platform, content, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(variantId, req.tenantId, id, platform, variantContent, 'draft', createdAt);
 
-    results.push({ id: variantId, platform, content: variantContent, status: 'draft' });
+    results.push({ id: variantId, platform, content: variantContent, status: 'draft', source });
   }
 
   res.status(201).json({ post_id: id, variants: results });

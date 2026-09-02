@@ -6,11 +6,23 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
+function requireTenant(req, res, next) {
+  const tenantId = req.headers['x-tenant-id'];
+  if (!tenantId || typeof tenantId !== 'string' || tenantId.trim() === '') {
+    return res.status(400).json({ error: 'X-Tenant-Id header is required' });
+  }
+  req.tenantId = tenantId;
+  next();
+}
+
+app.use(requireTenant);
+
 const db = new DatabaseSync('studio.db');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS posts (
     id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
     source TEXT,
     content TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -18,6 +30,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS variants (
     id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
     post_id TEXT NOT NULL,
     platform TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -72,8 +85,8 @@ app.post('/posts', async (req, res) => {
   const id = randomUUID();
   const createdAt = new Date().toISOString();
 
-  db.prepare('INSERT INTO posts (id, source, content, created_at) VALUES (?, ?, ?, ?)')
-    .run(id, source, content, createdAt);
+  db.prepare('INSERT INTO posts (id, tenant_id, source, content, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(id, req.tenantId, source, content, createdAt);
 
   res.status(201).json({ id, source, content, created_at: createdAt });
 });
@@ -181,21 +194,20 @@ function generateVariant(platform, sourceContent) {
 // ---------- Routes ----------
 app.post('/posts/:id/generate', (req, res) => {
   const { id } = req.params;
-  const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
+  const post = db.prepare('SELECT * FROM posts WHERE id = ? AND tenant_id = ?').get(id, req.tenantId);
 
   if (!post) {
     return res.status(404).json({ error: 'Post not found' });
   }
 
   const platforms = req.body?.platforms || Object.keys(PROFILES);
-  const overrides = req.body?.overrides || {}; // optional: { "x": "custom text..." }
+  const overrides = req.body?.overrides || {};
   const results = [];
 
   for (const platform of platforms) {
     let variantContent;
 
     if (overrides[platform] !== undefined) {
-      // custom content; no auto-truncation, real validation applies
       variantContent = overrides[platform];
     } else {
       try {
@@ -210,14 +222,14 @@ app.post('/posts/:id/generate', (req, res) => {
 
     if (!validation.valid) {
       results.push({ platform, blocked: true, reason: validation.reason });
-      continue; // a rule-breaking variant never reaches review
+      continue;
     }
 
     const variantId = randomUUID();
     const createdAt = new Date().toISOString();
 
-    db.prepare('INSERT INTO variants (id, post_id, platform, content, status, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(variantId, id, platform, variantContent, 'draft', createdAt);
+    db.prepare('INSERT INTO variants (id, tenant_id, post_id, platform, content, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(variantId, req.tenantId, id, platform, variantContent, 'draft', createdAt);
 
     results.push({ id: variantId, platform, content: variantContent, status: 'draft' });
   }
@@ -226,14 +238,14 @@ app.post('/posts/:id/generate', (req, res) => {
 });
 
 app.get('/variants/:id', (req, res) => {
-  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(req.params.id);
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId);
   if (!variant) return res.status(404).json({ error: 'Variant not found' });
   res.status(200).json(variant);
 });
 
 app.post('/variants/:id/approve', (req, res) => {
   const { id } = req.params;
-  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(id);
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ? AND tenant_id = ?').get(id, req.tenantId);
 
   if (!variant) {
     return res.status(404).json({ error: 'Variant not found' });
@@ -245,7 +257,7 @@ app.post('/variants/:id/approve', (req, res) => {
 
 app.post('/variants/:id/reject', (req, res) => {
   const { id } = req.params;
-  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(id);
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ? AND tenant_id = ?').get(id, req.tenantId);
 
   if (!variant) {
     return res.status(404).json({ error: 'Variant not found' });
@@ -258,7 +270,7 @@ app.post('/variants/:id/reject', (req, res) => {
 app.post('/variants/:id/edit', (req, res) => {
   const { id } = req.params;
   const { content } = req.body;
-  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(id);
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ? AND tenant_id = ?').get(id, req.tenantId);
 
   if (!variant) {
     return res.status(404).json({ error: 'Variant not found' });
@@ -276,7 +288,7 @@ app.post('/variants/:id/edit', (req, res) => {
 app.post('/variants/:id/schedule', (req, res) => {
   const { id } = req.params;
   const { scheduledAt } = req.body;
-  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(id);
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ? AND tenant_id = ?').get(id, req.tenantId);
 
   if (!variant) {
     return res.status(404).json({ error: 'Variant not found' });

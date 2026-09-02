@@ -1,6 +1,7 @@
 const express = require('express');
 const { DatabaseSync } = require('node:sqlite');
 const { randomUUID } = require('crypto');
+require('dotenv').config();
 
 const app = express();
 app.use(express.json());
@@ -231,6 +232,43 @@ app.post('/variants/:id/schedule', (req, res) => {
   }
 
   res.status(201).json({ slot_id: slotId, variant_id: id, scheduled_at: scheduledAt, status: 'pending' });
+});
+
+const { getPublisher } = require('./publishers');
+
+app.post('/slots/:id/publish', async (req, res) => {
+  const { id } = req.params;
+  const slot = db.prepare('SELECT * FROM schedule_slots WHERE id = ?').get(id);
+
+  if (!slot) {
+    return res.status(404).json({ error: 'Slot not found' });
+  }
+
+  // idempotency: if already published, return the original result instead of publishing again
+  if (slot.status === 'published') {
+    const existingHistory = db.prepare('SELECT * FROM publish_history WHERE slot_id = ? ORDER BY created_at DESC LIMIT 1').get(id);
+    return res.status(200).json({ slot_id: id, status: 'already_published', history: existingHistory });
+  }
+
+  const variant = db.prepare('SELECT * FROM variants WHERE id = ?').get(slot.variant_id);
+  const publisher = getPublisher(variant.platform);
+
+  const result = await publisher.publish(variant.content);
+  const historyId = randomUUID();
+  const createdAt = new Date().toISOString();
+
+  db.prepare('INSERT INTO publish_history (id, slot_id, variant_id, platform, result, external_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(historyId, id, variant.id, variant.platform, result.success ? 'success' : 'failure', result.externalRef || result.error, createdAt);
+
+  if (result.success) {
+    db.prepare('UPDATE schedule_slots SET status = ?, published_at = ? WHERE id = ?')
+      .run('published', createdAt, id);
+    db.prepare('UPDATE variants SET status = ? WHERE id = ?').run('published', variant.id);
+  } else {
+    db.prepare('UPDATE schedule_slots SET status = ? WHERE id = ?').run('failed', id);
+  }
+
+  res.status(result.success ? 201 : 502).json({ slot_id: id, ...result });
 });
 
 const PORT = process.env.PORT || 3000;

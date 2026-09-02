@@ -55,6 +55,67 @@ const PROFILES = {
   instagram: { maxLength: 2200, maxHashtags: 10, tone: 'casual/aesthetic' }
 };
 
+app.post('/posts', async (req, res) => {
+  const { source } = req.body;
+
+  if (!source || typeof source !== 'string' || source.trim() === '') {
+    return res.status(400).json({ error: 'source (a URL or raw text) is required' });
+  }
+
+  let content;
+  try {
+    content = await resolvePostContent(source);
+  } catch (err) {
+    return res.status(400).json({ error: `Could not process source: ${err.message}` });
+  }
+
+  const id = randomUUID();
+  const createdAt = new Date().toISOString();
+
+  db.prepare('INSERT INTO posts (id, source, content, created_at) VALUES (?, ?, ?, ?)')
+    .run(id, source, content, createdAt);
+
+  res.status(201).json({ id, source, content, created_at: createdAt });
+});
+
+function isUrl(str) {
+  try {
+    new URL(str);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function stripHtml(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function resolvePostContent(source) {
+  if (!isUrl(source)) {
+    return source;
+  }
+
+  const res = await fetch(source, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch URL: status ${res.status}`);
+  }
+
+  const html = await res.text();
+  const text = stripHtml(html);
+
+  if (!text || text.length < 20) {
+    throw new Error('Fetched URL but could not extract meaningful text content');
+  }
+
+  return text.slice(0, 5000);
+}
+
 function countHashtags(text) {
   const matches = text.match(/#\w+/g);
   return matches ? matches.length : 0;

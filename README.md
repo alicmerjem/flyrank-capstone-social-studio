@@ -86,6 +86,16 @@ curl -X POST http://localhost:3000/variants/<variant_id>/schedule \
 curl http://localhost:3000/publish-history
 ```
 
+## Running the test suite
+An automated test suite covers the "scary cases" from the brief: blocked variants (length, tone, and grounding violations), refused unapproved scheduling, duplicate-publish prevention, an adapter swap across two mock platforms, and tenant isolation.
+
+Make sure the server is running (`npm start` in one terminal), then in another:
+```
+npm test
+```
+
+Runs 12 tests, prints pass/fail for each, and exits non-zero if anything fails. All 12 currently pass.
+
 ## Constraint profiles
 See `DESIGN.md` for the full table. 
 

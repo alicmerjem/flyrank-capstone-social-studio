@@ -14,7 +14,7 @@ class DiscordPublisher {
     }
 
     try {
-      const res = await fetch(this.webhookUrl, {
+      const res = await fetch(`${this.webhookUrl}?wait=true`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content })
@@ -25,7 +25,13 @@ class DiscordPublisher {
         return { success: false, error: `Discord returned ${res.status}: ${text}` };
       }
 
-      return { success: true, externalRef: `discord-webhook-${Date.now()}` };
+      const message = await res.json();
+      const guildId = process.env.DISCORD_GUILD_ID;
+      const jumpLink = guildId
+        ? `https://discord.com/channels/${guildId}/${message.channel_id}/${message.id}`
+        : `discord:channel/${message.channel_id}/message/${message.id}`;
+
+      return { success: true, externalRef: jumpLink };
     } catch (err) {
       return { success: false, error: err.message };
     }

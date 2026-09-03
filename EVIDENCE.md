@@ -96,5 +96,16 @@ slot_id                              platform  result  created_at
 
 All 3 slots from the same batch published exactly once each, automatically, with no manual publish calls, proving the durable worker correctly resumed and processed the entire pending batch after a mid-wait restart, with no duplicates across any of the 3 slots.
 
+## Real publish links to the live message
+Discord publishing was updated to use `?wait=true` on the webhook call, which returns the real message object (message ID + channel ID). The publish record's `external_ref` is now a genuine clickable jump link, not a synthetic placeholder. 
+```
+GET /slots/.../publish
+→ external_ref: "https://discord.com/channels/1544686468536999946/1544686469526847531/1544994492912767088"
+```
+
+Verified by opening that exact URL in a browser. It jumps directly to the real, live message in the Discord channel. 
+
+![proof](image-2.png)
+
 ## Publish history: every attempt recorded
 `GET /publish-history` returns every publish attempt (both automatic worker-triggered and manual), each with platform, result, and an external reference - visible proof of what happened and when.

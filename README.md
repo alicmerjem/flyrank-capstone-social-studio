@@ -51,6 +51,7 @@ DISCORD_WEBHOOK_URL=your_discord_webhook_url
 LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_API_KEY=your_openrouter_key
 LLM_MODEL=openrouter/free
+DISCORD_GUILD_ID=your_discord_server_id
 ```
 
 Then run:
